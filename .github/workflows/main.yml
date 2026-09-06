@@ -169,20 +169,4 @@ jobs:
         with:
           name: Absen-CV-Hikmah-Tani-APK
           path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error        run: |
-          set -e
-          gradle -p "$PROJECT_DIR" assembleDebug --no-daemon
-
-      - name: Simpan APK
-        if: steps.findzip.outputs.has_zip == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Absen-CV-Hikmah-Tani-APK
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-
-      - name: Tidak ada ZIP
-        if: steps.findzip.outputs.has_zip != 'true'
-        run: |
-          echo "Workflow selesai tanpa build karena ZIP proyek belum ada."
-          echo "Silakan upload ZIP proyek Android ke repository."
