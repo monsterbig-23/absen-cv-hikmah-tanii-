@@ -14,61 +14,113 @@ jobs:
       - name: Ambil file repository
         uses: actions/checkout@v4
 
+      - name: Cari file ZIP proyek
+        id: findzip
+        shell: bash
+        run: |
+          set -e
+          ZIP_FILE=""
+
+          while IFS= read -r f; do
+            if unzip -l "$f" | grep -qE '(^|/)settings\.gradle($|[[:space:]])'; then
+              ZIP_FILE="$f"
+              break
+            fi
+          done < <(find . -maxdepth 1 -type f -name '*.zip' -print)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "Tidak ada ZIP proyek Android di repository."
+            echo "has_zip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "ZIP proyek: $ZIP_FILE"
+          echo "zip_file=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+          echo "has_zip=true" >> "$GITHUB_OUTPUT"
+
       - name: Siapkan Java
+        if: steps.findzip.outputs.has_zip == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Siapkan Android SDK
+        if: steps.findzip.outputs.has_zip == 'true'
         uses: android-actions/setup-android@v3
 
       - name: Siapkan Gradle
+        if: steps.findzip.outputs.has_zip == 'true'
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Bongkar file ZIP proyek
+      - name: Bongkar ZIP proyek
+        if: steps.findzip.outputs.has_zip == 'true'
+        shell: bash
         run: |
+          set -e
+          rm -rf project
           mkdir -p project
-          ZIP_FILE=$(find . -maxdepth 1 -type f -name '*.zip' | head -n 1)
-          echo "File ZIP: $ZIP_FILE"
-          unzip -q "$ZIP_FILE" -d project
+          unzip -q "${{ steps.findzip.outputs.zip_file }}" -d project
 
-          echo "Isi proyek:"
-          find project -maxdepth 3 -type f | head -100
-
-      - name: Aktifkan AndroidX
-        run: |
-          echo "android.useAndroidX=true" >> project/gradle.properties
-          echo "android.enableJetifier=true" >> project/gradle.properties
-
-      - name: Perbaiki kode MainActivity
-        run: |
-          find project -type f -name 'MainActivity.java' -print
-
-          FILE=$(find project -type f -name 'MainActivity.java' | head -n 1)
-
-          if [ -z "$FILE" ]; then
-            echo "MainActivity.java tidak ditemukan"
+          PROJECT_DIR="$(find project -type f -name 'settings.gradle' -print -quit | xargs -r dirname)"
+          if [ -z "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/app/build.gradle" ]; then
+            echo "Struktur proyek Android tidak ditemukan."
+            find project -maxdepth 5 -type f | head -200
             exit 1
           fi
 
-          echo "Memperbaiki file: $FILE"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Proyek Android: $PROJECT_DIR"
+
+      - name: Aktifkan AndroidX
+        if: steps.findzip.outputs.has_zip == 'true'
+        shell: bash
+        run: |
+          set -e
+          touch "$PROJECT_DIR/gradle.properties"
+
+          grep -q '^android.useAndroidX=true' "$PROJECT_DIR/gradle.properties" ||             echo 'android.useAndroidX=true' >> "$PROJECT_DIR/gradle.properties"
+
+          grep -q '^android.enableJetifier=true' "$PROJECT_DIR/gradle.properties" ||             echo 'android.enableJetifier=true' >> "$PROJECT_DIR/gradle.properties"
+
+      - name: Perbaiki kode MainActivity
+        if: steps.findzip.outputs.has_zip == 'true'
+        shell: bash
+        run: |
+          set -e
+          FILE="$(find "$PROJECT_DIR" -type f -name 'MainActivity.java' -print -quit)"
+
+          if [ -z "$FILE" ]; then
+            echo "MainActivity.java tidak ditemukan."
+            exit 1
+          fi
+
+          echo "MainActivity: $FILE"
 
           sed -i 's/\.setTextStyle(android\.graphics\.Typeface\.BOLD);/.setTypeface(null, android.graphics.Typeface.BOLD);/g' "$FILE"
 
-          echo "Pemeriksaan setTextStyle:"
-          grep -n "setTextStyle\|setTypeface" "$FILE" || true
+          echo "Pemeriksaan kode:"
+          grep -nE 'setTextStyle|setTypeface' "$FILE" || true
 
       - name: Build APK
+        if: steps.findzip.outputs.has_zip == 'true'
+        shell: bash
         run: |
-          cd project
-          gradle assembleDebug --no-daemon
+          set -e
+          gradle -p "$PROJECT_DIR" assembleDebug --no-daemon
 
       - name: Simpan APK
+        if: steps.findzip.outputs.has_zip == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Absen-CV-Hikmah-Tani-APK
-          path: project/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Tidak ada ZIP
+        if: steps.findzip.outputs.has_zip != 'true'
+        run: |
+          echo "Workflow selesai tanpa build karena ZIP proyek belum ada."
+          echo "Silakan upload ZIP proyek Android ke repository."
