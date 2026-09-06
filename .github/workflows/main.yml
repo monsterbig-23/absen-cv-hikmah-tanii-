@@ -37,6 +37,11 @@ jobs:
           echo "Isi proyek:"
           find project -maxdepth 2 -type f | head -50
 
+      - name: Aktifkan AndroidX
+        run: |
+          echo "android.useAndroidX=true" >> project/gradle.properties
+          echo "android.enableJetifier=true" >> project/gradle.properties
+
       - name: Build APK
         run: |
           cd project
