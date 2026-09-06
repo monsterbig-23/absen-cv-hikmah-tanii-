@@ -133,12 +133,27 @@ jobs:
           echo "MainActivity:"
           echo "$FILE"
 
+          # Perbaiki setTextStyle jika masih ada
           sed -i \
             's/\.setTextStyle(android\.graphics\.Typeface\.BOLD);/\.setTypeface(null, android.graphics.Typeface.BOLD);/g' \
             "$FILE"
 
+          # Tambahkan import GradientDrawable jika belum ada
+          if ! grep -q \
+            '^import android.graphics.drawable.GradientDrawable;' \
+            "$FILE"; then
+
+            sed -i \
+              '/^package /a import android.graphics.drawable.GradientDrawable;' \
+              "$FILE"
+          fi
+
           echo ""
-          echo "=== PEMERIKSAAN MainActivity ==="
+          echo "=== PEMERIKSAAN IMPORT ==="
+          grep -n "GradientDrawable" "$FILE" || true
+
+          echo ""
+          echo "=== PEMERIKSAAN TYPEFACE ==="
           grep -nE 'setTextStyle|setTypeface' "$FILE" || true
 
       - name: Build APK
