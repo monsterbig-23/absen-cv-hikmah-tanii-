@@ -34,13 +34,32 @@ jobs:
           ZIP_FILE=$(find . -maxdepth 1 -type f -name '*.zip' | head -n 1)
           echo "File ZIP: $ZIP_FILE"
           unzip -q "$ZIP_FILE" -d project
+
           echo "Isi proyek:"
-          find project -maxdepth 2 -type f | head -50
+          find project -maxdepth 3 -type f | head -100
 
       - name: Aktifkan AndroidX
         run: |
           echo "android.useAndroidX=true" >> project/gradle.properties
           echo "android.enableJetifier=true" >> project/gradle.properties
+
+      - name: Perbaiki kode MainActivity
+        run: |
+          find project -type f -name 'MainActivity.java' -print
+
+          FILE=$(find project -type f -name 'MainActivity.java' | head -n 1)
+
+          if [ -z "$FILE" ]; then
+            echo "MainActivity.java tidak ditemukan"
+            exit 1
+          fi
+
+          echo "Memperbaiki file: $FILE"
+
+          sed -i 's/\.setTextStyle(android\.graphics\.Typeface\.BOLD);/.setTypeface(null, android.graphics.Typeface.BOLD);/g' "$FILE"
+
+          echo "Pemeriksaan setTextStyle:"
+          grep -n "setTextStyle\|setTypeface" "$FILE" || true
 
       - name: Build APK
         run: |
