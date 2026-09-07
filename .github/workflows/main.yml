@@ -11,10 +11,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Cek file ZIP
+      - name: Cari file ZIP proyek
         shell: bash
         run: |
           set -e
@@ -23,7 +24,7 @@ jobs:
           ls -lah
 
           ZIP_FILE=$(find . -maxdepth 1 -type f \
-            -iname 'Absen_CV_Hikmah_Tani_FINAL_PERBAIKAN.zip' \
+            -iname '*ONLINE_FIREBASE_TERHUBUNG*.zip' \
             -print -quit)
 
           if [ -z "$ZIP_FILE" ]; then
@@ -33,16 +34,13 @@ jobs:
           fi
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: Tidak ada file ZIP proyek Android."
+            echo "ERROR: File ZIP proyek Android tidak ditemukan."
             exit 1
           fi
 
           echo "ZIP yang akan dibuild: $ZIP_FILE"
-          echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
 
-          echo ""
-          echo "=== ISI ZIP ==="
-          unzip -l "$ZIP_FILE" | head -100
+          echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
 
       - name: Siapkan Java 17
         uses: actions/setup-java@v4
@@ -58,7 +56,7 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Bongkar proyek
+      - name: Ekstrak proyek Android
         shell: bash
         run: |
           set -e
@@ -69,11 +67,11 @@ jobs:
           unzip -q "$ZIP_FILE" -d project
 
           echo "=== STRUKTUR PROYEK ==="
-          find project -maxdepth 5 -type f | sort | head -200
+          find project -maxdepth 4 -type f | sort | head -300
 
           PROJECT_DIR=$(find project \
             -type f \
-            -name 'settings.gradle' \
+            -name 'settings.gradle*' \
             -print -quit | xargs -r dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
@@ -81,14 +79,14 @@ jobs:
             exit 1
           fi
 
-          if [ ! -f "$PROJECT_DIR/app/build.gradle" ]; then
+          if [ ! -f "$PROJECT_DIR/app/build.gradle" ] && \
+             [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
             echo "ERROR: app/build.gradle tidak ditemukan."
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo ""
           echo "Proyek ditemukan di:"
           echo "$PROJECT_DIR"
 
@@ -99,85 +97,97 @@ jobs:
 
           touch "$PROJECT_DIR/gradle.properties"
 
-          sed -i '/^android.useAndroidX=/d' \
-            "$PROJECT_DIR/gradle.properties"
+          if ! grep -q '^android.useAndroidX=' "$PROJECT_DIR/gradle.properties"; then
+            echo 'android.useAndroidX=true' >> "$PROJECT_DIR/gradle.properties"
+          else
+            sed -i 's/^android.useAndroidX=.*/android.useAndroidX=true/' \
+              "$PROJECT_DIR/gradle.properties"
+          fi
 
-          sed -i '/^android.enableJetifier=/d' \
-            "$PROJECT_DIR/gradle.properties"
+          if ! grep -q '^android.enableJetifier=' "$PROJECT_DIR/gradle.properties"; then
+            echo 'android.enableJetifier=true' >> "$PROJECT_DIR/gradle.properties"
+          else
+            sed -i 's/^android.enableJetifier=.*/android.enableJetifier=true/' \
+              "$PROJECT_DIR/gradle.properties"
+          fi
 
-          echo "android.useAndroidX=true" \
-            >> "$PROJECT_DIR/gradle.properties"
-
-          echo "android.enableJetifier=true" \
-            >> "$PROJECT_DIR/gradle.properties"
-
-          echo ""
           echo "=== gradle.properties ==="
           cat "$PROJECT_DIR/gradle.properties"
 
-      - name: Perbaiki MainActivity
+      - name: Cek Firebase
         shell: bash
         run: |
           set -e
 
-          FILE=$(find "$PROJECT_DIR" \
-            -type f \
-            -name 'MainActivity.java' \
-            -print -quit)
-
-          if [ -z "$FILE" ]; then
-            echo "ERROR: MainActivity.java tidak ditemukan."
+          if [ ! -f "$PROJECT_DIR/app/google-services.json" ]; then
+            echo "ERROR: google-services.json tidak ditemukan."
+            echo "Pastikan file Firebase berada di folder app/."
             exit 1
           fi
 
-          echo "MainActivity:"
-          echo "$FILE"
+          echo "google-services.json ditemukan."
 
-          # Perbaiki setTextStyle jika masih ada
-          sed -i \
-            's/\.setTextStyle(android\.graphics\.Typeface\.BOLD);/\.setTypeface(null, android.graphics.Typeface.BOLD);/g' \
-            "$FILE"
+      - name: Periksa Gradle
+        shell: bash
+        run: |
+          set -e
 
-          # Tambahkan import GradientDrawable jika belum ada
-          if ! grep -q \
-            '^import android.graphics.drawable.GradientDrawable;' \
-            "$FILE"; then
-
-            sed -i \
-              '/^package /a import android.graphics.drawable.GradientDrawable;' \
-              "$FILE"
-          fi
+          echo "=== SETTINGS ==="
+          cat "$PROJECT_DIR/settings.gradle" 2>/dev/null || \
+          cat "$PROJECT_DIR/settings.gradle.kts"
 
           echo ""
-          echo "=== PEMERIKSAAN IMPORT ==="
-          grep -n "GradientDrawable" "$FILE" || true
-
-          echo ""
-          echo "=== PEMERIKSAAN TYPEFACE ==="
-          grep -nE 'setTextStyle|setTypeface' "$FILE" || true
+          echo "=== APP BUILD GRADLE ==="
+          cat "$PROJECT_DIR/app/build.gradle" 2>/dev/null || \
+          cat "$PROJECT_DIR/app/build.gradle.kts"
 
       - name: Build APK
         shell: bash
         run: |
           set -e
 
-          echo "================================="
-          echo "       MULAI BUILD APK"
-          echo "================================="
+          cd "$PROJECT_DIR"
 
-          gradle -p "$PROJECT_DIR" \
-            assembleDebug \
-            --no-daemon
+          echo "================================"
+          echo "       MULAI BUILD APK"
+          echo "================================"
+
+          gradle assembleDebug --no-daemon
 
           echo ""
-          echo "================================="
+          echo "================================"
           echo "       APK HASIL BUILD"
-          echo "================================="
+          echo "================================"
 
-          find "$PROJECT_DIR/app/build/outputs" \
-            -type f \
-            -name '*.apk' \
-            -print
+          find app/build/outputs/apk -type f -name '*.apk' -print
+
+      - name: Tampilkan SHA-1
+        shell: bash
+        run: |
+          set -e
+
+          echo "================================"
+          echo "          SHA-1 DEBUG"
+          echo "================================"
+
+          if [ -f "$HOME/.android/debug.keystore" ]; then
+
+            keytool -list -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -alias androiddebugkey \
+              -storepass android \
+              -keypass android | grep -E "SHA1:"
+
+          else
+
+            echo "debug.keystore belum ditemukan."
+            echo "Mencoba menggunakan signingReport..."
+
+            cd "$PROJECT_DIR"
+
+            gradle signingReport --no-daemon || true
+
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
