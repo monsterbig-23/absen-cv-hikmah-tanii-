@@ -90,6 +90,32 @@ jobs:
           echo "Proyek ditemukan di:"
           echo "$PROJECT_DIR"
 
+      - name: Pasang google-services.json terbaru
+        shell: bash
+        run: |
+          set -e
+
+          echo "=== CEK GOOGLE SERVICES ==="
+
+          if [ ! -f "./google-services.json" ]; then
+            echo "ERROR: google-services.json di root repository tidak ditemukan."
+            exit 1
+          fi
+
+          mkdir -p "$PROJECT_DIR/app"
+
+          cp "./google-services.json" \
+             "$PROJECT_DIR/app/google-services.json"
+
+          echo "google-services.json berhasil dipasang ke:"
+          echo "$PROJECT_DIR/app/google-services.json"
+
+          echo ""
+          echo "=== CEK PACKAGE FIREBASE ==="
+
+          grep -n '"package_name"' \
+            "$PROJECT_DIR/app/google-services.json" || true
+
       - name: Aktifkan AndroidX
         shell: bash
         run: |
@@ -97,18 +123,32 @@ jobs:
 
           touch "$PROJECT_DIR/gradle.properties"
 
-          if ! grep -q '^android.useAndroidX=' "$PROJECT_DIR/gradle.properties"; then
-            echo 'android.useAndroidX=true' >> "$PROJECT_DIR/gradle.properties"
+          if ! grep -q '^android.useAndroidX=' \
+            "$PROJECT_DIR/gradle.properties"; then
+
+            echo 'android.useAndroidX=true' \
+              >> "$PROJECT_DIR/gradle.properties"
+
           else
-            sed -i 's/^android.useAndroidX=.*/android.useAndroidX=true/' \
+
+            sed -i \
+              's/^android.useAndroidX=.*/android.useAndroidX=true/' \
               "$PROJECT_DIR/gradle.properties"
+
           fi
 
-          if ! grep -q '^android.enableJetifier=' "$PROJECT_DIR/gradle.properties"; then
-            echo 'android.enableJetifier=true' >> "$PROJECT_DIR/gradle.properties"
+          if ! grep -q '^android.enableJetifier=' \
+            "$PROJECT_DIR/gradle.properties"; then
+
+            echo 'android.enableJetifier=true' \
+              >> "$PROJECT_DIR/gradle.properties"
+
           else
-            sed -i 's/^android.enableJetifier=.*/android.enableJetifier=true/' \
+
+            sed -i \
+              's/^android.enableJetifier=.*/android.enableJetifier=true/' \
               "$PROJECT_DIR/gradle.properties"
+
           fi
 
           echo "=== gradle.properties ==="
@@ -120,8 +160,7 @@ jobs:
           set -e
 
           if [ ! -f "$PROJECT_DIR/app/google-services.json" ]; then
-            echo "ERROR: google-services.json tidak ditemukan."
-            echo "Pastikan file Firebase berada di folder app/."
+            echo "ERROR: google-services.json tidak ditemukan di app/."
             exit 1
           fi
 
@@ -133,11 +172,13 @@ jobs:
           set -e
 
           echo "=== SETTINGS ==="
+
           cat "$PROJECT_DIR/settings.gradle" 2>/dev/null || \
           cat "$PROJECT_DIR/settings.gradle.kts"
 
           echo ""
           echo "=== APP BUILD GRADLE ==="
+
           cat "$PROJECT_DIR/app/build.gradle" 2>/dev/null || \
           cat "$PROJECT_DIR/app/build.gradle.kts"
 
@@ -159,7 +200,10 @@ jobs:
           echo "       APK HASIL BUILD"
           echo "================================"
 
-          find app/build/outputs/apk -type f -name '*.apk' -print
+          find app/build/outputs/apk \
+            -type f \
+            -name '*.apk' \
+            -print
 
       - name: Tampilkan SHA-1
         shell: bash
